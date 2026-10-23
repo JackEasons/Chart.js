@@ -1,4 +1,4 @@
-import {_limitValue, _lookupByKey, isNullOrUndef, resolve} from '../helpers';
+import {_limitValue, _lookupByKey, isNullOrUndef, resolve} from '../helpers/index.js';
 
 function lttbDecimation(data, start, count, availableWidth, options) {
   /**
@@ -10,7 +10,7 @@ function lttbDecimation(data, start, count, availableWidth, options) {
    * The original implementation is MIT licensed.
    */
   const samples = options.samples || availableWidth;
-  // There is less points than the threshold, returning the whole array
+  // There are less points than the threshold, returning the whole array
   if (samples >= count) {
     return data.slice(start, start + count);
   }
@@ -46,7 +46,7 @@ function lttbDecimation(data, start, count, availableWidth, options) {
 
     // Adding offset
     const rangeOffs = Math.floor(i * bucketWidth) + 1 + start;
-    const rangeTo = Math.floor((i + 1) * bucketWidth) + 1 + start;
+    const rangeTo = Math.min(Math.floor((i + 1) * bucketWidth) + 1, count) + start;
     const {x: pointAx, y: pointAy} = data[a];
 
     // Note that this is changed from the original algorithm which initializes these
@@ -158,7 +158,12 @@ function cleanDecimatedDataset(dataset) {
     const data = dataset._data;
     delete dataset._decimated;
     delete dataset._data;
-    Object.defineProperty(dataset, 'data', {value: data});
+    Object.defineProperty(dataset, 'data', {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: data,
+    });
   }
 }
 
@@ -217,7 +222,7 @@ export default {
         return;
       }
 
-      if (meta.type !== 'line') {
+      if (!meta.controller.supportsDecimation) {
         // Only line datasets are supported
         return;
       }
@@ -234,7 +239,8 @@ export default {
       }
 
       let {start, count} = getStartAndCountOfVisiblePointsSimplified(meta, data);
-      if (count <= 4 * availableWidth) {
+      const threshold = options.threshold || 4 * availableWidth;
+      if (count <= threshold) {
         // No decimation is required until we are above this threshold
         cleanDecimatedDataset(dataset);
         return;

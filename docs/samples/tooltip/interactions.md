@@ -30,9 +30,25 @@ const actions = [
     }
   },
   {
-    name: 'Mode: nearest',
+    name: 'Mode: nearest, axis: xy',
     handler(chart) {
       chart.options.interaction.axis = 'xy';
+      chart.options.interaction.mode = 'nearest';
+      chart.update();
+    }
+  },
+  {
+    name: 'Mode: nearest, axis: x',
+    handler(chart) {
+      chart.options.interaction.axis = 'x';
+      chart.options.interaction.mode = 'nearest';
+      chart.update();
+    }
+  },
+  {
+    name: 'Mode: nearest, axis: y',
+    handler(chart) {
+      chart.options.interaction.axis = 'y';
       chart.options.interaction.mode = 'nearest';
       chart.update();
     }
@@ -98,8 +114,8 @@ const config = {
       title: {
         display: true,
         text: (ctx) => {
-          const {intersect, mode} = ctx.chart.options.interaction;
-          return 'Mode: ' + mode + ', intersect: ' + intersect;
+          const {axis = 'xy', intersect, mode} = ctx.chart.options.interaction;
+          return 'Mode: ' + mode + ', axis: ' + axis + ', intersect: ' + intersect;
         }
       },
     }
@@ -112,3 +128,9 @@ module.exports = {
   config: config,
 };
 ```
+
+## Docs 
+* [Data structures (`labels`)](../../general/data-structures.md)
+* [Line](../../charts/line.md)
+* [Tooltip](../../configuration/tooltip.md)
+* [Interactions](../../configuration/interactions.md)

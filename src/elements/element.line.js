@@ -1,12 +1,12 @@
-import Element from '../core/core.element';
-import {_bezierInterpolation, _pointInLine, _steppedInterpolation} from '../helpers/helpers.interpolation';
-import {_computeSegments, _boundSegments} from '../helpers/helpers.segment';
-import {_steppedLineTo, _bezierCurveTo} from '../helpers/helpers.canvas';
-import {_updateBezierControlPoints} from '../helpers/helpers.curve';
-import {valueOrDefault} from '../helpers';
+import Element from '../core/core.element.js';
+import {_bezierInterpolation, _pointInLine, _steppedInterpolation} from '../helpers/helpers.interpolation.js';
+import {_computeSegments, _boundSegments} from '../helpers/helpers.segment.js';
+import {_steppedLineTo, _bezierCurveTo} from '../helpers/helpers.canvas.js';
+import {_updateBezierControlPoints} from '../helpers/helpers.curve.js';
+import {valueOrDefault} from '../helpers/index.js';
 
 /**
- * @typedef { import("./element.point").default } PointElement
+ * @typedef { import('./element.point.js').default } PointElement
  */
 
 function setStyle(ctx, options, style = options) {
@@ -22,12 +22,15 @@ function lineTo(ctx, previous, target) {
   ctx.lineTo(target.x, target.y);
 }
 
+/**
+ * @returns {any}
+ */
 function getLineMethod(options) {
   if (options.stepped) {
     return _steppedLineTo;
   }
 
-  if (options.tension) {
+  if (options.tension || options.cubicInterpolationMode === 'monotone') {
     return _bezierCurveTo;
   }
 
@@ -182,7 +185,7 @@ function fastPathSegment(ctx, line, segment, params) {
 function _getSegmentMethod(line) {
   const opts = line.options;
   const borderDash = opts.borderDash && opts.borderDash.length;
-  const useFastPath = !line._decimated && !line._loop && !opts.tension && !opts.stepped && !borderDash;
+  const useFastPath = !line._decimated && !line._loop && !opts.tension && opts.cubicInterpolationMode !== 'monotone' && !opts.stepped && !borderDash;
   return useFastPath ? fastPathSegment : pathSegment;
 }
 
@@ -194,7 +197,7 @@ function _getInterpolationMethod(options) {
     return _steppedInterpolation;
   }
 
-  if (options.tension) {
+  if (options.tension || options.cubicInterpolationMode === 'monotone') {
     return _bezierInterpolation;
   }
 
@@ -230,7 +233,7 @@ function strokePathDirect(ctx, line, start, count) {
 const usePath2D = typeof Path2D === 'function';
 
 function draw(ctx, line, start, count) {
-  if (usePath2D && line.segments.length === 1) {
+  if (usePath2D && !line.options.segment) {
     strokePathWithCache(ctx, line, start, count);
   } else {
     strokePathDirect(ctx, line, start, count);
@@ -239,11 +242,46 @@ function draw(ctx, line, start, count) {
 
 export default class LineElement extends Element {
 
+  static id = 'line';
+
+  /**
+   * @type {any}
+   */
+  static defaults = {
+    borderCapStyle: 'butt',
+    borderDash: [],
+    borderDashOffset: 0,
+    borderJoinStyle: 'miter',
+    borderWidth: 3,
+    capBezierPoints: true,
+    cubicInterpolationMode: 'default',
+    fill: false,
+    spanGaps: false,
+    stepped: false,
+    tension: 0,
+  };
+
+  /**
+   * @type {any}
+   */
+  static defaultRoutes = {
+    backgroundColor: 'backgroundColor',
+    borderColor: 'borderColor'
+  };
+
+
+  static descriptors = {
+    _scriptable: true,
+    _indexable: (name) => name !== 'borderDash' && name !== 'fill',
+  };
+
+
   constructor(cfg) {
     super();
 
     this.animated = true;
     this.options = undefined;
+    this._chart = undefined;
     this._loop = undefined;
     this._fullLoop = undefined;
     this._path = undefined;
@@ -251,28 +289,27 @@ export default class LineElement extends Element {
     this._segments = undefined;
     this._decimated = false;
     this._pointsUpdated = false;
+    this._datasetIndex = undefined;
 
     if (cfg) {
       Object.assign(this, cfg);
     }
   }
 
-  updateControlPoints(chartArea) {
-    const me = this;
-    const options = me.options;
-    if (options.tension && !options.stepped && !me._pointsUpdated) {
-      const loop = options.spanGaps ? me._loop : me._fullLoop;
-      _updateBezierControlPoints(me._points, options, chartArea, loop);
-      me._pointsUpdated = true;
+  updateControlPoints(chartArea, indexAxis) {
+    const options = this.options;
+    if ((options.tension || options.cubicInterpolationMode === 'monotone') && !options.stepped && !this._pointsUpdated) {
+      const loop = options.spanGaps ? this._loop : this._fullLoop;
+      _updateBezierControlPoints(this._points, options, chartArea, loop, indexAxis);
+      this._pointsUpdated = true;
     }
   }
 
   set points(points) {
-    const me = this;
-    me._points = points;
-    delete me._segments;
-    delete me._path;
-    me._pointsUpdated = false;
+    this._points = points;
+    delete this._segments;
+    delete this._path;
+    this._pointsUpdated = false;
   }
 
   get points() {
@@ -312,11 +349,10 @@ export default class LineElement extends Element {
 	 * @returns {PointElement|undefined}
 	 */
   interpolate(point, property) {
-    const me = this;
-    const options = me.options;
+    const options = this.options;
     const value = point[property];
-    const points = me.points;
-    const segments = _boundSegments(me, {property, start: value, end: value});
+    const points = this.points;
+    const segments = _boundSegments(this, {property, start: value, end: value});
 
     if (!segments.length) {
       return;
@@ -368,16 +404,15 @@ export default class LineElement extends Element {
 	 * @returns {undefined|boolean} - true if line is a full loop (path should be closed)
 	 */
   path(ctx, start, count) {
-    const me = this;
-    const segments = me.segments;
-    const segmentMethod = _getSegmentMethod(me);
-    let loop = me._loop;
+    const segments = this.segments;
+    const segmentMethod = _getSegmentMethod(this);
+    let loop = this._loop;
 
     start = start || 0;
-    count = count || (me.points.length - start);
+    count = count || (this.points.length - start);
 
     for (const segment of segments) {
-      loop &= segmentMethod(ctx, me, segment, {start, end: start + count - 1});
+      loop &= segmentMethod(ctx, this, segment, {start, end: start + count - 1});
     }
     return !!loop;
   }
@@ -390,57 +425,21 @@ export default class LineElement extends Element {
 	 * @param {number} [count]
 	 */
   draw(ctx, chartArea, start, count) {
-    const me = this;
-    const options = me.options || {};
-    const points = me.points || [];
+    const options = this.options || {};
+    const points = this.points || [];
 
-    if (!points.length || !options.borderWidth) {
-      return;
+    if (points.length && options.borderWidth) {
+      ctx.save();
+
+      draw(ctx, this, start, count);
+
+      ctx.restore();
     }
 
-    ctx.save();
-
-    draw(ctx, me, start, count);
-
-    ctx.restore();
-
-    if (me.animated) {
+    if (this.animated) {
       // When line is animated, the control points and path are not cached.
-      me._pointsUpdated = false;
-      me._path = undefined;
+      this._pointsUpdated = false;
+      this._path = undefined;
     }
   }
 }
-
-LineElement.id = 'line';
-
-/**
- * @type {any}
- */
-LineElement.defaults = {
-  borderCapStyle: 'butt',
-  borderDash: [],
-  borderDashOffset: 0,
-  borderJoinStyle: 'miter',
-  borderWidth: 3,
-  capBezierPoints: true,
-  cubicInterpolationMode: 'default',
-  fill: false,
-  spanGaps: false,
-  stepped: false,
-  tension: 0,
-};
-
-/**
- * @type {any}
- */
-LineElement.defaultRoutes = {
-  backgroundColor: 'backgroundColor',
-  borderColor: 'borderColor'
-};
-
-
-LineElement.descriptors = {
-  _scriptable: true,
-  _indexable: (name) => name !== 'borderDash' && name !== 'fill',
-};

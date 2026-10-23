@@ -1,6 +1,6 @@
 # Cartesian Axes
 
-Axes that follow a cartesian grid are known as 'Cartesian Axes'. Cartesian axes are used for line, bar, and bubble charts. Four cartesian axes are included in Chart.js by default.
+Axes that follow a cartesian grid are known as 'Cartesian Axes'. Cartesian axes are used for line, bar, and bubble charts. Five cartesian axes are included in Chart.js by default.
 
 * [linear](./linear.md)
 * [logarithmic](./logarithmic.md)
@@ -44,8 +44,8 @@ const config = {
   options: {
     scales: {
       x: {
-        grid: {
-          borderColor: 'red'
+        border: {
+          color: 'red'
         }
       }
     }
@@ -192,6 +192,10 @@ module.exports = {
 
 ## Common Configuration
 
+:::tip Note
+These are only the common options supported by all cartesian axes. Please see the specific axis documentation for all the available options for that axis.
+:::
+
 !!!include(axes/cartesian/_common.md)!!!
 
 !!!include(axes/_common.md)!!!
@@ -201,7 +205,7 @@ module.exports = {
 An axis can either be positioned at the edge of the chart, at the center of the chart area, or dynamically with respect to a data value.
 
 To position the axis at the edge of the chart, set the `position` option to one of: `'top'`, `'left'`, `'bottom'`, `'right'`.
-To position the axis at the center of the chart area, set the `position` option to `'center'`. In this mode, either the `axis` option is specified or the axis ID starts with the letter 'x' or 'y'.
+To position the axis at the center of the chart area, set the `position` option to `'center'`. In this mode, either the `axis` option must be specified or the axis ID has to start with the letter 'x' or 'y'. This is so chart.js knows what kind of axis (horizontal or vertical) it is.
 To position the axis with respect to a data value, set the `position` option to an object such as:
 
 ```javascript
@@ -220,6 +224,10 @@ The `bounds` property controls the scale boundary strategy (bypassed by `min`/`m
 * `'ticks'`: makes sure ticks are fully visible, data outside are truncated
 
 ### Tick Configuration
+
+:::tip Note
+These are only the common tick options supported by all cartesian axes. Please see specific axis documentation for all of the available options for that axis.
+:::
 
 !!!include(axes/cartesian/_common_ticks.md)!!!
 
@@ -285,8 +293,9 @@ module.exports = {
 
 :::tip Note
 The `crossAlign` setting is only effective when these preconditions are met:
-  * tick rotation is `0`
-  * axis position is `'top'`, '`left'`, `'bottom'` or `'right'`
+
+* tick rotation is `0`
+* axis position is `'top'`, '`left'`, `'bottom'` or `'right'`
 :::
 
 ### Axis ID
@@ -294,7 +303,7 @@ The `crossAlign` setting is only effective when these preconditions are met:
 The properties `dataset.xAxisID` or `dataset.yAxisID` have to match to `scales` property. This is especially needed if multi-axes charts are used.
 
 ```javascript
-var myChart = new Chart(ctx, {
+const myChart = new Chart(ctx, {
     type: 'line',
     data: {
         datasets: [{
@@ -312,7 +321,7 @@ var myChart = new Chart(ctx, {
             },
             'second-y-axis': {
                 type: 'linear'
-            }]
+            }
         }
     }
 });
@@ -325,7 +334,7 @@ With cartesian axes, it is possible to create multiple X and Y axes. To do so, y
 In the example below, we are creating two Y axes. We then use the `yAxisID` property to map the datasets to their correct axes.
 
 ```javascript
-var myChart = new Chart(ctx, {
+const myChart = new Chart(ctx, {
     type: 'line',
     data: {
         datasets: [{
@@ -352,7 +361,7 @@ var myChart = new Chart(ctx, {
             'right-y-axis': {
                 type: 'linear',
                 position: 'right'
-            }]
+            }
         }
     }
 });

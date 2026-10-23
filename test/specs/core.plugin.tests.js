@@ -224,7 +224,7 @@ describe('Chart.plugins', function() {
       Chart.unregister(plugins.a);
     });
 
-    it('should not called plugins when config.options.plugins.{id} is FALSE', function() {
+    it('should not call plugins when config.options.plugins.{id} is FALSE', function() {
       var plugins = {
         a: {id: 'a', hook: function() {}},
         b: {id: 'b', hook: function() {}},
@@ -297,6 +297,29 @@ describe('Chart.plugins', function() {
       Chart.unregister(plugin);
     });
 
+    // https://github.com/chartjs/Chart.js/issues/10482
+    it('should resolve defaults for local plugins', function() {
+      var plugin = {id: 'a', hook: function() {}, defaults: {bar: 'bar'}};
+      var chart = window.acquireChart({
+        plugins: [plugin],
+        options: {
+          plugins: {
+            a: {
+              foo: 'foo'
+            }
+          }
+        },
+      });
+
+      spyOn(plugin, 'hook');
+      chart.notifyPlugins('hook');
+
+      expect(plugin.hook).toHaveBeenCalled();
+      expect(plugin.hook.calls.first().args[2]).toEqualOptions({foo: 'foo', bar: 'bar'});
+
+      Chart.unregister(plugin);
+    });
+
     // https://github.com/chartjs/Chart.js/issues/5111#issuecomment-355934167
     it('should update plugin options', function() {
       var plugin = {id: 'a', hook: function() {}};
@@ -326,6 +349,42 @@ describe('Chart.plugins', function() {
 
       expect(plugin.hook).toHaveBeenCalled();
       expect(plugin.hook.calls.first().args[2]).toEqualOptions({bar: 'bar'});
+    });
+
+    // https://github.com/chartjs/Chart.js/issues/10654
+    it('should resolve options even if some subnodes are set as undefined', function() {
+      var runtimeOptions;
+      var plugin = {
+        id: 'a',
+        afterUpdate: function(chart, args, options) {
+          options.l1.l2.l3.display = true;
+          runtimeOptions = options;
+        },
+        defaults: {
+          l1: {
+            l2: {
+              l3: {
+                display: false
+              }
+            }
+          }
+        }
+      };
+      window.acquireChart({
+        plugins: [plugin],
+        options: {
+          plugins: {
+            a: {
+              l1: {
+                l2: undefined
+              }
+            },
+          }
+        },
+      });
+
+      expect(runtimeOptions.l1.l2.l3.display).toBe(true);
+      Chart.unregister(plugin);
     });
 
     it('should disable all plugins', function() {
@@ -398,10 +457,10 @@ describe('Chart.plugins', function() {
       const results = [];
       const chart = window.acquireChart({
         options: {
-          events: ['mousemove', 'test', 'test2'],
+          events: ['mousemove', 'test', 'test2', 'pointerleave'],
           plugins: {
             testPlugin: {
-              events: ['test']
+              events: ['test', 'pointerleave']
             }
           }
         },
@@ -418,7 +477,34 @@ describe('Chart.plugins', function() {
       await jasmine.triggerMouseEvent(chart, 'mousemove', {x: 0, y: 0});
       await jasmine.triggerMouseEvent(chart, 'test', {x: 0, y: 0});
       await jasmine.triggerMouseEvent(chart, 'test2', {x: 0, y: 0});
-      expect(results).toEqual(['beforetest', 'aftertest']);
+      await jasmine.triggerMouseEvent(chart, 'pointerleave', {x: 0, y: 0});
+      expect(results).toEqual(['beforetest', 'aftertest', 'beforemouseout', 'aftermouseout']);
+    });
+
+    it('should not call plugins after uninstall', async function() {
+      const results = [];
+      const chart = window.acquireChart({
+        options: {
+          events: ['test'],
+          plugins: {
+            testPlugin: {
+              events: ['test']
+            }
+          }
+        },
+        plugins: [{
+          id: 'testPlugin',
+          reset: () => results.push('reset'),
+          afterDestroy: () => results.push('afterDestroy'),
+          uninstall: () => results.push('uninstall'),
+        }]
+      });
+      chart.reset();
+      expect(results).toEqual(['reset']);
+      chart.destroy();
+      expect(results).toEqual(['reset', 'afterDestroy', 'uninstall']);
+      chart.reset();
+      expect(results).toEqual(['reset', 'afterDestroy', 'uninstall']);
     });
   });
 });

@@ -1088,6 +1088,71 @@ describe('Plugin.Tooltip', function() {
       expect(Object.prototype.hasOwnProperty.call(fn.calls.first().args[1], 'y')).toBe(true);
       expect(fn.calls.first().object instanceof Tooltip).toBe(true);
     });
+
+    it('Should ignore same x position when calculating average position with index interaction on stacked bar', async function() {
+      var chart = window.acquireChart({
+        type: 'bar',
+        data: {
+          datasets: [{
+            label: 'Dataset 1',
+            data: [10, 20, 30],
+            pointHoverBorderColor: 'rgb(255, 0, 0)',
+            pointHoverBackgroundColor: 'rgb(0, 255, 0)',
+            stack: 'stack1',
+          }, {
+            label: 'Dataset 2',
+            data: [40, 40, 40],
+            pointHoverBorderColor: 'rgb(0, 0, 255)',
+            pointHoverBackgroundColor: 'rgb(0, 255, 255)',
+            stack: 'stack1',
+          }, {
+            label: 'Dataset 3',
+            data: [90, 100, 110],
+            pointHoverBorderColor: 'rgb(0, 0, 255)',
+            pointHoverBackgroundColor: 'rgb(0, 255, 255)'
+          }],
+          labels: ['Point 1', 'Point 2', 'Point 3']
+        },
+        options: {
+          interaction: {
+            mode: 'index'
+          },
+          plugins: {
+            position: 'average',
+          },
+        }
+      });
+
+      // Trigger an event over top of the
+      var pointIndex = 1;
+      var datasetIndex = 0;
+      var meta = chart.getDatasetMeta(datasetIndex);
+      var point = meta.data[pointIndex];
+      await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+
+      var tooltipModel = chart.tooltip;
+      const activeElements = tooltipModel.getActiveElements();
+
+      const xPositionArray = activeElements.map((element) => element.element.x);
+      const xPositionArrayAverage = xPositionArray.reduce((a, b) => a + b) / xPositionArray.length;
+
+      const xPositionSet = new Set(xPositionArray);
+      const xPositionSetAverage = [...xPositionSet].reduce((a, b) => a + b) / xPositionSet.size;
+
+      expect(xPositionArray.length).toBe(3);
+      expect(xPositionSet.size).toBe(2);
+      expect(tooltipModel.caretX).not.toBe(xPositionArrayAverage);
+      expect(tooltipModel.caretX).toBe(xPositionSetAverage);
+    });
+
+    it('Should not fail with all hiden data elements on the average positioner', function() {
+      const averagePositioner = tooltipPlugin.positioners.average;
+
+      // Simulate `hasValue` returns false
+      expect(() => averagePositioner([{x: 'invalidNumber', y: 'invalidNumber'}])).not.toThrow();
+      const result = averagePositioner([{x: 'invalidNumber', y: 'invalidNumber'}]);
+      expect(result).toBe(false);
+    });
   });
 
   it('Should avoid tooltip truncation in x axis if there is enough space to show tooltip without truncation', async function() {
@@ -1419,7 +1484,7 @@ describe('Plugin.Tooltip', function() {
 
     var mockContext = window.createMockContext();
     var tooltip = new Tooltip({
-      _chart: {
+      chart: {
         getContext: () => ({}),
         options: {
           plugins: {
@@ -1555,6 +1620,201 @@ describe('Plugin.Tooltip', function() {
       chart.tooltip.setActiveElements([{datasetIndex: 0, index: 0}], {x: 0, y: 0});
       expect(chart.tooltip.getActiveElements()[0].element).toBe(meta.data[0]);
     });
+
+    it('should not replace the user set active elements by event replay', async function() {
+      var chart = window.acquireChart({
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Dataset 1',
+            data: [10, 20, 30],
+            pointHoverBorderColor: 'rgb(255, 0, 0)',
+            pointHoverBackgroundColor: 'rgb(0, 255, 0)'
+          }],
+          labels: ['Point 1', 'Point 2', 'Point 3']
+        },
+        options: {
+          events: ['pointerdown', 'pointerup']
+        }
+      });
+
+      const meta = chart.getDatasetMeta(0);
+      const point0 = meta.data[0];
+      const point1 = meta.data[1];
+
+      await jasmine.triggerMouseEvent(chart, 'pointerdown', {x: point0.x, y: point0.y});
+      expect(chart.tooltip.opacity).toBe(1);
+      expect(chart.tooltip.getActiveElements()).toEqual([{datasetIndex: 0, index: 0, element: point0}]);
+
+      chart.tooltip.setActiveElements([{datasetIndex: 0, index: 1}]);
+      chart.update();
+      expect(chart.tooltip.opacity).toBe(1);
+      expect(chart.tooltip.getActiveElements()).toEqual([{datasetIndex: 0, index: 1, element: point1}]);
+
+      chart.tooltip.setActiveElements([]);
+      chart.update();
+      expect(chart.tooltip.opacity).toBe(0);
+      expect(chart.tooltip.getActiveElements().length).toBe(0);
+    });
+
+    it('should not change the active elements on events outside chartArea, except for mouseout', async function() {
+      var chart = acquireChart({
+        type: 'line',
+        data: {
+          labels: ['A', 'B', 'C', 'D'],
+          datasets: [{
+            data: [10, 20, 30, 100]
+          }],
+        },
+        options: {
+          scales: {
+            x: {display: false},
+            y: {display: false}
+          },
+          layout: {
+            padding: 5
+          }
+        }
+      });
+
+      var point = chart.getDatasetMeta(0).data[0];
+
+      await jasmine.triggerMouseEvent(chart, 'mousemove', {x: point.x, y: point.y});
+      expect(chart.tooltip.getActiveElements()).toEqual([{datasetIndex: 0, index: 0, element: point}]);
+
+      await jasmine.triggerMouseEvent(chart, 'mousemove', {x: 1, y: 1});
+      expect(chart.tooltip.getActiveElements()).toEqual([{datasetIndex: 0, index: 0, element: point}]);
+
+      await jasmine.triggerMouseEvent(chart, 'mouseout', {x: 1, y: 1});
+      expect(chart.tooltip.getActiveElements()).toEqual([]);
+    });
+
+    it('should update active elements when datasets are removed and added', async function() {
+      var dataset = {
+        label: 'Dataset 1',
+        data: [10, 20, 30],
+        pointHoverBorderColor: 'rgb(255, 0, 0)',
+        pointHoverBackgroundColor: 'rgb(0, 255, 0)'
+      };
+      var chart = window.acquireChart({
+        type: 'line',
+        data: {
+          datasets: [dataset],
+          labels: ['Point 1', 'Point 2', 'Point 3']
+        },
+        options: {
+          plugins: {
+            tooltip: {
+              mode: 'nearest',
+              intersect: true
+            }
+          }
+        }
+      });
+
+      var meta = chart.getDatasetMeta(0);
+      var point = meta.data[1];
+      var expectedPoint = jasmine.objectContaining({datasetIndex: 0, index: 1});
+
+      await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+
+      expect(chart.tooltip.getActiveElements()).toEqual([expectedPoint]);
+
+      chart.data.datasets = [];
+      chart.update();
+
+      expect(chart.tooltip.getActiveElements()).toEqual([]);
+
+      chart.data.datasets = [dataset];
+      chart.update();
+
+      expect(chart.tooltip.getActiveElements()).toEqual([expectedPoint]);
+    });
+  });
+
+  it('should tolerate datasets removed on events outside chartArea', async function() {
+    const dataset1 = {
+      label: 'Dataset 1',
+      data: [10, 20, 30],
+    };
+    const dataset2 = {
+      label: 'Dataset 2',
+      data: [10, 25, 35],
+    };
+    const chart = window.acquireChart({
+      type: 'line',
+      data: {
+        datasets: [dataset1, dataset2],
+        labels: ['Point 1', 'Point 2', 'Point 3']
+      },
+      options: {
+        plugins: {
+          tooltip: {
+            mode: 'index',
+            intersect: false
+          }
+        }
+      }
+    });
+
+    const meta = chart.getDatasetMeta(0);
+    const point = meta.data[1];
+    const expectedPoints = [jasmine.objectContaining({datasetIndex: 0, index: 1}), jasmine.objectContaining({datasetIndex: 1, index: 1})];
+
+    await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+    await jasmine.triggerMouseEvent(chart, 'mousemove', {x: chart.chartArea.left - 5, y: point.y});
+
+    expect(chart.tooltip.getActiveElements()).toEqual(expectedPoints);
+
+    chart.data.datasets = [dataset1];
+    chart.update();
+
+    await jasmine.triggerMouseEvent(chart, 'mousemove', {x: 2, y: 1});
+
+    expect(chart.tooltip.getActiveElements()).toEqual([expectedPoints[0]]);
+  });
+
+  it('should tolerate elements removed on events outside chartArea', async function() {
+    const dataset1 = {
+      label: 'Dataset 1',
+      data: [10, 20, 30],
+    };
+    const dataset2 = {
+      label: 'Dataset 2',
+      data: [10, 25, 35],
+    };
+    const chart = window.acquireChart({
+      type: 'line',
+      data: {
+        datasets: [dataset1, dataset2],
+        labels: ['Point 1', 'Point 2', 'Point 3']
+      },
+      options: {
+        plugins: {
+          tooltip: {
+            mode: 'index',
+            intersect: false
+          }
+        }
+      }
+    });
+
+    const meta = chart.getDatasetMeta(0);
+    const point = meta.data[1];
+    const expectedPoints = [jasmine.objectContaining({datasetIndex: 0, index: 1}), jasmine.objectContaining({datasetIndex: 1, index: 1})];
+
+    await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+    await jasmine.triggerMouseEvent(chart, 'mousemove', {x: chart.chartArea.left - 5, y: point.y});
+
+    expect(chart.tooltip.getActiveElements()).toEqual(expectedPoints);
+
+    dataset1.data = dataset1.data.slice(0, 1);
+    chart.data.datasets = [dataset1];
+    chart.update();
+
+    await jasmine.triggerMouseEvent(chart, 'mousemove', {x: 2, y: 1});
+
+    expect(chart.tooltip.getActiveElements()).toEqual([]);
   });
 
   describe('events', function() {
@@ -1587,5 +1847,105 @@ describe('Plugin.Tooltip', function() {
       await jasmine.triggerMouseEvent(chart, 'click', point);
       expect(chart.tooltip.opacity).toEqual(1);
     });
+  });
+
+  it('should use default callback if user callback returns undefined', async() => {
+    const chart = window.acquireChart({
+      type: 'line',
+      data: {
+        datasets: [{
+          label: 'Dataset 1',
+          data: [10, 20, 30],
+          pointHoverBorderColor: 'rgb(255, 0, 0)',
+          pointHoverBackgroundColor: 'rgb(0, 255, 0)'
+        }, {
+          label: 'Dataset 2',
+          data: [40, 40, 40],
+          pointHoverBorderColor: 'rgb(0, 0, 255)',
+          pointHoverBackgroundColor: 'rgb(0, 255, 255)'
+        }],
+        labels: ['Point 1', 'Point 2', 'Point 3']
+      },
+      options: {
+        plugins: {
+          tooltip: {
+            callbacks: {
+              beforeTitle() {
+                return undefined;
+              },
+              title() {
+                return undefined;
+              },
+              afterTitle() {
+                return undefined;
+              },
+              beforeBody() {
+                return undefined;
+              },
+              beforeLabel() {
+                return undefined;
+              },
+              label() {
+                return undefined;
+              },
+              afterLabel() {
+                return undefined;
+              },
+              afterBody() {
+                return undefined;
+              },
+              beforeFooter() {
+                return undefined;
+              },
+              footer() {
+                return undefined;
+              },
+              afterFooter() {
+                return undefined;
+              },
+              labelTextColor() {
+                return undefined;
+              },
+              labelPointStyle() {
+                return undefined;
+              }
+            }
+          }
+        }
+      }
+    });
+    const {defaults} = Chart;
+    const {tooltip} = chart;
+    const point = chart.getDatasetMeta(0).data[0];
+
+    await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+
+    expect(tooltip).toEqual(jasmine.objectContaining({
+      opacity: 1,
+
+      // Text
+      title: ['Point 1'],
+      beforeBody: [],
+      body: [{
+        before: [],
+        lines: ['Dataset 1: 10'],
+        after: []
+      }],
+      afterBody: [],
+      footer: [],
+      labelTextColors: ['#fff'],
+      labelColors: [{
+        borderColor: defaults.borderColor,
+        backgroundColor: defaults.backgroundColor,
+        borderWidth: 1,
+        borderDash: undefined,
+        borderDashOffset: undefined,
+        borderRadius: 0,
+      }],
+      labelPointStyles: [{
+        pointStyle: 'circle',
+        rotation: 0
+      }]
+    }));
   });
 });

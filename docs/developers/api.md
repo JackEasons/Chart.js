@@ -4,7 +4,7 @@ For each chart, there are a set of global prototype methods on the shared chart 
 
 ```javascript
 // For example:
-var myLineChart = new Chart(ctx, config);
+const myLineChart = new Chart(ctx, config);
 ```
 
 ## .destroy()
@@ -25,13 +25,19 @@ Triggers an update of the chart. This can be safely called after updating the da
 myLineChart.data.datasets[0].data[2] = 50; // Would update the first dataset's value of 'March' to be 50
 myLineChart.update(); // Calling update now animates the position of March from 90 to 50.
 ```
+A `mode` can be provided to indicate transition configuration should be used. This can be either:
 
-A `mode` string can be provided to indicate transition configuration should be used. Core calls this method using any of `'active'`, `'hide'`, `'reset'`, `'resize'`, `'show'` or `undefined`. `'none'` is also a supported mode for skipping animations for single update. Please see [animations](../configuration/animations.md) docs for more details.
+- **string value**: Core calls this method using any of `'active'`, `'hide'`, `'reset'`, `'resize'`, `'show'` or `undefined`. `'none'` is also supported for skipping animations for single update. Please see [animations](../configuration/animations.md) docs for more details.
 
-Example:
+- **function**: that receives a context object `{ datasetIndex: number }` and returns a mode string, allowing different modes per dataset.
 
+Examples:
 ```javascript
+// Using string mode
 myChart.update('active');
+
+// Using function mode for dataset-specific animations
+myChart.update(ctx => ctx.datasetIndex === 0 ? 'active' : 'none');
 ```
 
 See [Updating Charts](updates.md) for more details.
@@ -103,14 +109,22 @@ To get an item that was clicked on, `getElementsAtEventForMode` can be used.
 
 ```javascript
 function clickHandler(evt) {
-    const points = myChart.getElementAtEventForMode(evt, 'nearest', { intersect: true }, true);
+    const points = myChart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
 
     if (points.length) {
         const firstPoint = points[0];
-        var label = myChart.data.labels[firstPoint.index];
-        var value = myChart.data.datasets[firstPoint.datasetIndex].data[firstPoint.index];
+        const label = myChart.data.labels[firstPoint.index];
+        const value = myChart.data.datasets[firstPoint.datasetIndex].data[firstPoint.index];
     }
 }
+```
+
+## .getSortedVisibleDatasetMetas()
+
+Returns an array of all the dataset meta's in the order that they are drawn on the canvas that are not hidden.
+
+```javascript
+const visibleMetas = chart.getSortedVisibleDatasetMetas();
 ```
 
 ## .getDatasetMeta(index)
@@ -122,8 +136,25 @@ The `data` property of the metadata will contain information about each point, b
 Extensive examples of usage are available in the [Chart.js tests](https://github.com/chartjs/Chart.js/tree/master/test).
 
 ```javascript
-var meta = myChart.getDatasetMeta(0);
-var x = meta.data[0].x;
+const meta = myChart.getDatasetMeta(0);
+const x = meta.data[0].x;
+```
+
+## getVisibleDatasetCount
+
+Returns the number of datasets that are currently not hidden.
+
+```javascript
+const numberOfVisibleDatasets = chart.getVisibleDatasetCount();
+```
+## isDatasetVisible(datasetIndex)
+
+Returns a boolean if a dataset at the given index is currently visible.
+
+The visibility is determined by first checking the hidden property in the dataset metadata (set via [`setDatasetVisibility()`](#setdatasetvisibility-datasetindex-visibility) and accessible through [`getDatasetMeta()`](#getdatasetmeta-index)). If this is not set, the hidden property of the dataset object itself (`chart.data.datasets[n].hidden`) is returned.
+
+```javascript
+chart.isDatasetVisible(1);
 ```
 
 ## setDatasetVisibility(datasetIndex, visibility)
@@ -146,26 +177,32 @@ chart.update(); // chart now renders with item hidden
 
 ## getDataVisibility(index)
 
-Returns the stored visibility state of an data index for all datasets. Set by [toggleDataVisibility](#toggleDataVisibility). A dataset controller should use this method to determine if an item should not be visible.
+Returns the stored visibility state of a data index for all datasets. Set by [toggleDataVisibility](#toggledatavisibility-index). A dataset controller should use this method to determine if an item should not be visible.
 
 ```javascript
-var visible = chart.getDataVisibility(2);
+const visible = chart.getDataVisibility(2);
 ```
 
-## hide(datasetIndex)
+## hide(datasetIndex, dataIndex?)
 
-Sets the visibility for the given dataset to false. Updates the chart and animates the dataset with `'hide'` mode. This animation can be configured under the `hide` key in animation options. Please see [animations](../configuration/animations.md) docs for more details.
+If dataIndex is not specified, sets the visibility for the given dataset to false. Updates the chart and animates the dataset with `'hide'` mode. This animation can be configured under the `hide` key in animation options. Please see [animations](../configuration/animations.md) docs for more details.
+
+If dataIndex is specified, sets the hidden flag of that element to true and updates the chart.
 
 ```javascript
 chart.hide(1); // hides dataset at index 1 and does 'hide' animation.
+chart.hide(0, 2); // hides the data element at index 2 of the first dataset.
 ```
 
-## show(datasetIndex)
+## show(datasetIndex, dataIndex?)
 
-Sets the visibility for the given dataset to true. Updates the chart and animates the dataset with `'show'` mode. This animation can be configured under the `show` key in animation options. Please see [animations](../configuration/animations.md) docs for more details.
+If dataIndex is not specified, sets the visibility for the given dataset to true. Updates the chart and animates the dataset with `'show'` mode. This animation can be configured under the `show` key in animation options. Please see [animations](../configuration/animations.md) docs for more details.
+
+If dataIndex is specified, sets the hidden flag of that element to false and updates the chart.
 
 ```javascript
 chart.show(1); // shows dataset at index 1 and does 'show' animation.
+chart.show(0, 2); // shows the data element at index 2 of the first dataset.
 ```
 
 ## setActiveElements(activeElements)
@@ -178,10 +215,38 @@ chart.setActiveElements([
 ]);
 ```
 
+## isPluginEnabled(pluginId)
+
+Returns a boolean if a plugin with the given ID has been registered to the chart instance.
+
+```javascript
+chart.isPluginEnabled('filler');
+```
+
 ## Static: getChart(key)
 
 Finds the chart instance from the given key. If the key is a `string`, it is interpreted as the ID of the Canvas node for the Chart. The key can also be a `CanvasRenderingContext2D` or an `HTMLDOMElement`. This will return `undefined` if no Chart is found. To be found, the chart must have previously been created.
 
 ```javascript
 const chart = Chart.getChart("canvas-id");
+```
+
+## Static: register(chartComponentLike)
+
+Used to register plugins, axis types or chart types globally to all your charts.
+
+```javascript
+import { Chart, Tooltip, LinearScale, PointElement, BubbleController } from 'chart.js';
+
+Chart.register(Tooltip, LinearScale, PointElement, BubbleController);
+```
+
+## Static: unregister(chartComponentLike)
+
+Used to unregister plugins, axis types or chart types globally from all your charts.
+
+```javascript
+import { Chart, Tooltip, LinearScale, PointElement, BubbleController } from 'chart.js';
+
+Chart.unregister(Tooltip, LinearScale, PointElement, BubbleController);
 ```

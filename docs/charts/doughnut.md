@@ -100,23 +100,31 @@ Namespaces:
 
 The doughnut/pie chart allows a number of properties to be specified for each dataset. These are used to set display properties for a specific dataset. For example, the colours of the dataset's arcs are generally set this way.
 
-| Name | Type | [Scriptable](../general/options.md#scriptable-options) | [Indexable](../general/options.md#indexable-options) | Default
-| ---- | ---- | :----: | :----: | ----
-| [`backgroundColor`](#styling) | [`Color`](../general/colors.md) | Yes | Yes | `'rgba(0, 0, 0, 0.1)'`
-| [`borderAlign`](#border-alignment) | `string` | Yes | Yes | `'center'`
-| [`borderColor`](#styling) | [`Color`](../general/colors.md) | Yes | Yes | `'#fff'`
-| [`borderRadius`](#border-radius) | `number`\|`object` | Yes | Yes | `0`
-| [`borderWidth`](#styling) | `number` | Yes | Yes | `2`
-| [`circumference`](#general) | `number` | - | - | `undefined`
-| [`clip`](#general) | `number`\|`object` | - | - | `undefined`
-| [`data`](#data-structure) | `number[]` | - | - | **required**
-| [`hoverBackgroundColor`](#interations) | [`Color`](../general/colors.md) | Yes | Yes | `undefined`
-| [`hoverBorderColor`](#interactions) | [`Color`](../general/colors.md) | Yes | Yes | `undefined`
-| [`hoverBorderWidth`](#interactions) | `number` | Yes | Yes | `undefined`
-| [`hoverOffset`](#interactions) | `number` | Yes | Yes | `0`
-| [`offset`](#styling) | `number` | Yes | Yes | `0`
-| [`rotation`](#general) | `number` | - | - | `undefined`
-| [`weight`](#styling) | `number` | - | - | `1`
+| Name                                     | Type                            | [Scriptable](../general/options.md#scriptable-options) | [Indexable](../general/options.md#indexable-options) | Default
+|------------------------------------------|---------------------------------| :----: | :----: | ----
+| [`backgroundColor`](#styling)            | [`Color`](../general/colors.md) | Yes | Yes | `'rgba(0, 0, 0, 0.1)'`
+| [`borderAlign`](#border-alignment)       | `'center'`\|`'inner'`           | Yes | Yes | `'center'`
+| [`borderColor`](#styling)                | [`Color`](../general/colors.md) | Yes | Yes | `'#fff'`
+| [`borderDash`](#styling)                 | `number[]`                      | Yes | - | `[]`
+| [`borderDashOffset`](#styling)           | `number`                        | Yes | - | `0.0`
+| [`borderJoinStyle`](#styling)            | `'round'`\|`'bevel'`\|`'miter'` | Yes | Yes | `undefined`
+| [`borderRadius`](#border-radius)         | `number`\|`object`              | Yes | Yes | `0`
+| [`borderWidth`](#styling)                | `number`                        | Yes | Yes | `2`
+| [`circumference`](#general)              | `number`                        | - | - | `undefined`
+| [`clip`](#general)                       | `number`\|`object`\|`false`     | - | - | `undefined`
+| [`data`](#data-structure)                | `number[]`                      | - | - | **required**
+| [`hoverBackgroundColor`](#interactions)  | [`Color`](../general/colors.md) | Yes | Yes | `undefined`
+| [`hoverBorderColor`](#interactions)      | [`Color`](../general/colors.md) | Yes | Yes | `undefined`
+| [`hoverBorderDash`](#interactions)       | `number[]`                      | Yes | - | `undefined`
+| [`hoverBorderDashOffset`](#interactions) | `number`                        | Yes | - | `undefined`
+| [`hoverBorderJoinStyle`](#interactions)  | `'round'`\|`'bevel'`\|`'miter'` | Yes | Yes | `undefined`
+| [`hoverBorderWidth`](#interactions)      | `number`                        | Yes | Yes | `undefined`
+| [`hoverOffset`](#interactions)           | `number`                        | Yes | Yes | `0`
+| [`offset`](#styling)                     | `number`\|`number[]`            | Yes | Yes | `0`
+| [`rotation`](#general)                   | `number`                        | - | - | `undefined`
+| [`spacing`](#styling)                    | `number`                        | - | - | `0`
+| [`spacingMode`](#styling)                | `angular`\|`proportional`\|`parallel`                       | - | - | `angular`
+| [`weight`](#styling)                     | `number`                        | - | - | `1`
 
 All these values, if `undefined`, fallback to the scopes described in [option resolution](../general/options)
 
@@ -136,8 +144,12 @@ The style of each arc can be controlled with the following properties:
 | ---- | ----
 | `backgroundColor` | arc background color.
 | `borderColor` | arc border color.
+| `borderDash` | arc border length and spacing of dashes. See [MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/setLineDash).
+| `borderDashOffset` | arc border offset for line dashes. See [MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineDashOffset).
+| `borderJoinStyle` | arc border join style. See [MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineJoin).
 | `borderWidth` | arc border width (in pixels).
 | `offset` | arc offset (in pixels).
+| `spacing` | Fixed arc offset (in pixels). Similar to `offset` but applies to all arcs.
 | `weight` | The relative thickness of the dataset. Providing a value for weight will cause the pie or doughnut dataset to be drawn with a thickness relative to the sum of all the dataset weight values.
 
 All these values, if `undefined`, fallback to the associated [`elements.arc.*`](../configuration/elements.md#arc-configuration) options.
@@ -163,6 +175,9 @@ The interaction with each arc can be controlled with the following properties:
 | ---- | -----------
 | `hoverBackgroundColor` | arc background color when hovered.
 | `hoverBorderColor` | arc border color when hovered.
+| `hoverBorderDash` | arc border length and spacing of dashes when hovered. See [MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/setLineDash).
+| `hoverBorderDashOffset` | arc border offset for line dashes when hovered. See [MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineDashOffset).
+| `hoverBorderJoinStyle` | arc border join style when hovered. See [MDN](https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/lineJoin).
 | `hoverBorderWidth` | arc border width when hovered (in pixels).
 | `hoverOffset` | arc offset when hovered (in pixels).
 
@@ -187,7 +202,7 @@ We can also change these default values for each Doughnut type that is created, 
 
 ## Data Structure
 
-For a pie chart, datasets need to contain an array of data points. The data points should be a number, Chart.js will total all of the numbers and calculate the relative proportion of each.
+For a pie chart, datasets need to contain an array of data points. The data points should be a number, Chart.js will total all the numbers and calculate the relative proportion of each.
 
 You also need to specify an array of labels so that tooltips appear correctly.
 

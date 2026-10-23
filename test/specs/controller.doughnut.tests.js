@@ -46,6 +46,22 @@ describe('Chart.controllers.doughnut', function() {
     expect(meta.data[3] instanceof Chart.elements.ArcElement).toBe(true);
   });
 
+  it('should default arc spacingMode to angular', function() {
+    var chart = window.acquireChart({
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [10, 20]
+        }],
+        labels: ['a', 'b']
+      }
+    });
+
+    var meta = chart.getDatasetMeta(0);
+    expect(meta.data[0].options.spacingMode).toBe('angular');
+    expect(meta.data[1].options.spacingMode).toBe('angular');
+  });
+
   it ('should reset and update elements', function() {
     var chart = window.acquireChart({
       type: 'doughnut',
@@ -397,5 +413,51 @@ describe('Chart.controllers.doughnut', function() {
       expect(arc.options.borderColor).toBe('rgb(50, 100, 150)');
       expect(arc.options.borderWidth).toBe(2);
     });
+  });
+
+  it('should not override tooltip title and label callbacks', async() => {
+    const chart = window.acquireChart({
+      type: 'doughnut',
+      data: {
+        labels: ['Label 1', 'Label 2'],
+        datasets: [{
+          data: [21, 79],
+          label: 'Dataset 1'
+        }, {
+          data: [33, 67],
+          label: 'Dataset 2'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+      }
+    });
+    const {tooltip} = chart;
+    const point = chart.getDatasetMeta(0).data[0];
+
+    await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+
+    expect(tooltip.title).toEqual(['Label 1']);
+    expect(tooltip.body).toEqual([{
+      before: [],
+      lines: ['Dataset 1: 21'],
+      after: []
+    }]);
+
+    chart.options.plugins.tooltip = {mode: 'dataset'};
+    chart.update();
+    await jasmine.triggerMouseEvent(chart, 'mousemove', point);
+
+    expect(tooltip.title).toEqual(['Dataset 1']);
+    expect(tooltip.body).toEqual([{
+      before: [],
+      lines: ['Label 1: 21'],
+      after: []
+    }, {
+      before: [],
+      lines: ['Label 2: 79'],
+      after: []
+    }]);
   });
 });

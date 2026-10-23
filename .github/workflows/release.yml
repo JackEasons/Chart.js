@@ -4,48 +4,65 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   setup:
+    permissions:
+      contents: none
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.trim.outputs.version }}
     steps:
       - id: trim
-        run: echo "::set-output name=version::${TAG:1}"
+        run: echo "version=${TAG:1}" >> $GITHUB_OUTPUT
         env:
           TAG: ${{ github.event.release.tag_name }}
 
   release:
+    permissions:
+      contents: write  # for actions/upload-release-asset to upload release asset
+      id-token: write  # for npm trusted publishing (OIDC)
     needs: setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v1
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
         with:
-          node-version: '14.x'
           registry-url: https://registry.npmjs.org/
+          node-version: 24
+          cache: pnpm
       - name: Setup and build
         run: |
-          npm ci
-          npm install -g json
+          pnpm install
+          pnpm install -g json
           json -I -f package.json -e "this.version=\"$VERSION\""
-          json -I -f package-lock.json -e "this.version=\"$VERSION\""
-          npm run build
+          pnpm run build
           ./scripts/docs-config.sh "$VERSION" release
-          npm run docs
-          npm pack
+          pnpm run docs
+          pnpm pack
         env:
           VERSION: ${{ needs.setup.outputs.version }}
       - name: Publish to NPM
         run: ./scripts/publish.sh
         env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
           VERSION: ${{ needs.setup.outputs.version }}
+      - name: Generate docs deploy token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.DOCS_DEPLOY_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_DEPLOY_PRIVATE_KEY }}
+          owner: chartjs
+          repositories: chartjs.github.io
+          permission-contents: write
       - name: Deploy Docs
         run: ./scripts/deploy-docs.sh "$VERSION" release
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
-          GH_AUTH_EMAIL: ${{ secrets.GH_AUTH_EMAIL }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           VERSION: ${{ needs.setup.outputs.version }}
       - name: Upload NPM package file
         id: upload-npm-package-file
@@ -59,29 +76,39 @@ jobs:
           asset_name: ${{ format('chart.js-{0}.tgz', needs.setup.outputs.version) }}
           asset_content_type: application/gzip
   release-tag:
-    needs: [setup,release]
+    needs: [setup, release]
     runs-on: ubuntu-latest
     if: "!github.event.release.prerelease"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v1
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7
         with:
-          node-version: '14.x'
           registry-url: https://registry.npmjs.org/
+          node-version: 24
+          cache: pnpm
       - name: Setup and build
         run: |
-          npm ci
-          npm install -g json
+          pnpm install
+          pnpm install -g json
           json -I -f package.json -e "this.version=\"$VERSION\""
-          json -I -f package-lock.json -e "this.version=\"$VERSION\""
-          npm run build
+          pnpm run build
           ./scripts/docs-config.sh "$VERSION"
-          npm run docs
+          pnpm run docs
         env:
           VERSION: ${{ needs.setup.outputs.version }}
+      - name: Generate docs deploy token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.DOCS_DEPLOY_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_DEPLOY_PRIVATE_KEY }}
+          owner: chartjs
+          repositories: chartjs.github.io
+          permission-contents: write
       - name: Deploy Docs
         run: ./scripts/deploy-docs.sh "$VERSION"
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
-          GH_AUTH_EMAIL: ${{ secrets.GH_AUTH_EMAIL }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
           VERSION: ${{ needs.setup.outputs.version }}

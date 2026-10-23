@@ -1,8 +1,10 @@
-import {_angleBetween, _angleDiff, _normalizeAngle} from './helpers.math';
+import {_angleBetween, _angleDiff, _isBetween, _normalizeAngle} from './helpers.math.js';
+import {createContext} from './helpers.options.js';
+import {isPatternOrGradient} from './helpers.color.js';
 
 /**
- * @typedef { import("../elements/element.line").default } LineElement
- * @typedef { import("../elements/element.point").default } PointElement
+ * @typedef { import('../elements/element.line.js').default } LineElement
+ * @typedef { import('../elements/element.point.js').default } PointElement
  * @typedef {{start: number, end: number, loop: boolean, style?: any}} Segment
  */
 
@@ -15,7 +17,7 @@ function propertyFn(property) {
     };
   }
   return {
-    between: (n, s, e) => n >= Math.min(s, e) && n <= Math.max(e, s),
+    between: _isBetween,
     compare: (a, b) => a - b,
     normalize: x => x
   };
@@ -100,6 +102,11 @@ export function _boundSegment(segment, points, bounds) {
     }
 
     value = normalize(point[property]);
+
+    if (value === prevValue) {
+      continue;
+    }
+
     inside = between(value, startBound, endBound);
 
     if (subStart === null && shouldStart()) {
@@ -152,7 +159,7 @@ function findStartAndEnd(points, count, loop, spanGaps) {
   let end = count - 1;
 
   if (loop && !spanGaps) {
-    // loop and not spaning gaps, first find a gap to start from
+    // loop and not spanning gaps, first find a gap to start from
     while (start < count && !points[start].skip) {
       start++;
     }
@@ -241,12 +248,12 @@ export function _computeSegments(line, segmentOptions) {
   const {start, end} = findStartAndEnd(points, count, loop, spanGaps);
 
   if (spanGaps === true) {
-    return splitByStyles([{start, end, loop}], points, segmentOptions);
+    return splitByStyles(line, [{start, end, loop}], points, segmentOptions);
   }
 
   const max = end < start ? end + count : end;
   const completeLoop = !!line._fullLoop && start === 0 && end === count - 1;
-  return splitByStyles(solidSegments(points, start, max, completeLoop), points, segmentOptions);
+  return splitByStyles(line, solidSegments(points, start, max, completeLoop), points, segmentOptions);
 }
 
 /**
@@ -255,41 +262,72 @@ export function _computeSegments(line, segmentOptions) {
  * @param {object} [segmentOptions]
  * @return {Segment[]}
  */
-function splitByStyles(segments, points, segmentOptions) {
+function splitByStyles(line, segments, points, segmentOptions) {
   if (!segmentOptions || !segmentOptions.setContext || !points) {
     return segments;
   }
-  return doSplitByStyles(segments, points, segmentOptions);
+  return doSplitByStyles(line, segments, points, segmentOptions);
 }
 
 /**
+ * @param {LineElement} line
  * @param {Segment[]} segments
  * @param {PointElement[]} points
  * @param {object} [segmentOptions]
  * @return {Segment[]}
  */
-function doSplitByStyles(segments, points, segmentOptions) {
+function doSplitByStyles(line, segments, points, segmentOptions) {
+  const chartContext = line._chart.getContext();
+  const baseStyle = readStyle(line.options);
+  const {_datasetIndex: datasetIndex, options: {spanGaps}} = line;
   const count = points.length;
   const result = [];
+  let prevStyle = baseStyle;
   let start = segments[0].start;
   let i = start;
+
+  function addStyle(s, e, l, st) {
+    const dir = spanGaps ? -1 : 1;
+    if (s === e) {
+      return;
+    }
+    // Style can not start/end on a skipped point, adjust indices accordingly
+    s += count;
+    while (points[s % count].skip) {
+      s -= dir;
+    }
+    while (points[e % count].skip) {
+      e += dir;
+    }
+    if (s % count !== e % count) {
+      result.push({start: s % count, end: e % count, loop: l, style: st});
+      prevStyle = st;
+      start = e % count;
+    }
+  }
+
   for (const segment of segments) {
-    let prevStyle, style;
+    start = spanGaps ? start : segment.start;
     let prev = points[start % count];
+    let style;
     for (i = start + 1; i <= segment.end; i++) {
       const pt = points[i % count];
-      style = readStyle(segmentOptions.setContext({type: 'segment', p0: prev, p1: pt}));
+      style = readStyle(segmentOptions.setContext(createContext(chartContext, {
+        type: 'segment',
+        p0: prev,
+        p1: pt,
+        p0DataIndex: (i - 1) % count,
+        p1DataIndex: i % count,
+        datasetIndex
+      })));
       if (styleChanged(style, prevStyle)) {
-        result.push({start: start, end: i - 1, loop: segment.loop, style: prevStyle});
-        prevStyle = style;
-        start = i - 1;
+        addStyle(start, i - 1, segment.loop, prevStyle);
       }
       prev = pt;
       prevStyle = style;
     }
     if (start < i - 1) {
-      result.push({start, end: i - 1, loop: segment.loop, style});
-      start = i - 1;
+      addStyle(start, i - 1, segment.loop, prevStyle);
     }
   }
 
@@ -309,5 +347,18 @@ function readStyle(options) {
 }
 
 function styleChanged(style, prevStyle) {
-  return prevStyle && JSON.stringify(style) !== JSON.stringify(prevStyle);
+  if (!prevStyle) {
+    return false;
+  }
+  const cache = [];
+  const replacer = function(key, value) {
+    if (!isPatternOrGradient(value)) {
+      return value;
+    }
+    if (!cache.includes(value)) {
+      cache.push(value);
+    }
+    return cache.indexOf(value);
+  };
+  return JSON.stringify(style, replacer) !== JSON.stringify(prevStyle, replacer);
 }

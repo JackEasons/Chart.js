@@ -1,7 +1,6 @@
-// Tests of the interaction handlers in Core.Interaction
-
-// Test the rectangle element
 describe('Core.Interaction', function() {
+  describe('auto', jasmine.fixture.specs('core.interaction'));
+
   describe('point mode', function() {
     beforeEach(function() {
       this.chart = window.acquireChart({
@@ -326,7 +325,7 @@ describe('Core.Interaction', function() {
   describe('nearest mode', function() {
     describe('intersect: false', function() {
       beforeEach(function() {
-        this.chart = window.acquireChart({
+        this.lineChart = window.acquireChart({
           type: 'line',
           data: {
             datasets: [{
@@ -345,11 +344,27 @@ describe('Core.Interaction', function() {
             labels: ['Point 1', 'Point 2', 'Point 3']
           }
         });
+        this.polarChart = window.acquireChart({
+          type: 'polarArea',
+          data: {
+            datasets: [{
+              data: [1, 9, 5]
+            }],
+            labels: ['Point 1', 'Point 2', 'Point 3']
+          },
+          options: {
+            plugins: {
+              legend: {
+                display: false
+              },
+            },
+          }
+        });
       });
 
       describe('axis: xy', function() {
         it ('should return the nearest item', function() {
-          var chart = this.chart;
+          var chart = this.lineChart;
           var evt = {
             type: 'click',
             chart: chart,
@@ -365,7 +380,7 @@ describe('Core.Interaction', function() {
         });
 
         it ('should return all items at the same nearest distance', function() {
-          var chart = this.chart;
+          var chart = this.lineChart;
           var meta0 = chart.getDatasetMeta(0);
           var meta1 = chart.getDatasetMeta(1);
 
@@ -391,7 +406,7 @@ describe('Core.Interaction', function() {
 
       describe('axis: x', function() {
         it ('should return all items at current x', function() {
-          var chart = this.chart;
+          var chart = this.lineChart;
           var meta0 = chart.getDatasetMeta(0);
           var meta1 = chart.getDatasetMeta(1);
 
@@ -415,7 +430,7 @@ describe('Core.Interaction', function() {
         });
 
         it ('should return all items at nearest x-distance', function() {
-          var chart = this.chart;
+          var chart = this.lineChart;
           var meta0 = chart.getDatasetMeta(0);
           var meta1 = chart.getDatasetMeta(1);
 
@@ -441,7 +456,7 @@ describe('Core.Interaction', function() {
 
       describe('axis: y', function() {
         it ('should return item with value 30', function() {
-          var chart = this.chart;
+          var chart = this.lineChart;
           var meta0 = chart.getDatasetMeta(0);
 
           // 'Point 1', y = 30
@@ -464,7 +479,7 @@ describe('Core.Interaction', function() {
         });
 
         it ('should return all items at value 40', function() {
-          var chart = this.chart;
+          var chart = this.lineChart;
           var meta0 = chart.getDatasetMeta(0);
           var meta1 = chart.getDatasetMeta(1);
 
@@ -485,6 +500,40 @@ describe('Core.Interaction', function() {
           // Should return points with value 40
           var elements = Chart.Interaction.modes.nearest(chart, evt, {axis: 'y', intersect: false}).map(item => item.element);
           expect(elements).toEqual([meta0.data[1], meta1.data[0], meta1.data[1], meta1.data[2]]);
+        });
+      });
+
+      describe('axis: r', function() {
+        it ('should return item with value 9', function() {
+          var chart = this.polarChart;
+          var meta0 = chart.getDatasetMeta(0);
+
+          var evt = {
+            type: 'click',
+            chart: chart,
+            native: true, // Needed, otherwise assumed to be a DOM event
+            x: chart.width / 2,
+            y: chart.height / 2 + 5,
+          };
+
+          var elements = Chart.Interaction.modes.nearest(chart, evt, {axis: 'r'}).map(item => item.element);
+          expect(elements).toEqual([meta0.data[1]]);
+        });
+
+        it ('should return item with value 1 when clicked outside of it', function() {
+          var chart = this.polarChart;
+          var meta0 = chart.getDatasetMeta(0);
+
+          var evt = {
+            type: 'click',
+            chart: chart,
+            native: true, // Needed, otherwise assumed to be a DOM event
+            x: chart.width,
+            y: 0,
+          };
+
+          var elements = Chart.Interaction.modes.nearest(chart, evt, {axis: 'r', intersect: false}).map(item => item.element);
+          expect(elements).toEqual([meta0.data[0]]);
         });
       });
     });
@@ -783,6 +832,194 @@ describe('Core.Interaction', function() {
 
       elements = Chart.Interaction.modes.y(chart, evt, {intersect: true}).map(item => item.element);
       expect(elements).toEqual([meta0.data[1], meta1.data[0], meta1.data[1], meta1.data[2]]);
+    });
+  });
+
+  describe('tooltip element of scatter chart', function() {
+    it ('out-of-range datapoints are not shown in tooltip', function() {
+      let data = [];
+      for (let i = 0; i < 1000; i++) {
+        data.push({x: i, y: i});
+      }
+
+      const chart = window.acquireChart({
+        type: 'scatter',
+        data: {
+          datasets: [{data}]
+        },
+        options: {
+          scales: {
+            x: {
+              min: 2
+            }
+          }
+        }
+      });
+
+      const meta0 = chart.getDatasetMeta(0);
+      const firstElement = meta0.data[0];
+
+      const evt = {
+        type: 'click',
+        chart: chart,
+        native: true, // needed otherwise things its a DOM event
+        x: firstElement.x,
+        y: firstElement.y
+      };
+
+      const elements = Chart.Interaction.modes.point(chart, evt, {intersect: true}).map(item => item.element);
+      expect(elements).not.toContain(firstElement);
+    });
+
+    it ('out-of-range datapoints are shown in tooltip if included', function() {
+      let data = [];
+      for (let i = 0; i < 1000; i++) {
+        data.push({x: i, y: i});
+      }
+
+      const chart = window.acquireChart({
+        type: 'scatter',
+        data: {
+          datasets: [{data}]
+        },
+        options: {
+          scales: {
+            x: {
+              min: 2
+            }
+          }
+        }
+      });
+
+      const meta0 = chart.getDatasetMeta(0);
+      const firstElement = meta0.data[0];
+
+      const evt = {
+        type: 'click',
+        chart: chart,
+        native: true, // needed otherwise it thinks its a DOM event
+        x: firstElement.x,
+        y: firstElement.y
+      };
+
+      const elements = Chart.Interaction.modes.point(
+        chart,
+        evt,
+        {
+          intersect: true,
+          includeInvisible: true
+        }).map(item => item.element);
+      expect(elements).toContain(firstElement);
+    });
+  });
+
+  const testCases = [
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 0,
+      expectedNearestPointIndex: 0
+    },
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 1,
+      expectedNearestPointIndex: 1},
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 2,
+      expectedNearestPointIndex: 1
+    },
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 3,
+      expectedNearestPointIndex: 1
+    },
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 4,
+      expectedNearestPointIndex: 6
+    },
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 5,
+      expectedNearestPointIndex: 6
+    },
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 6,
+      expectedNearestPointIndex: 6
+    },
+    {
+      data: [12, 19, null, null, null, null, 5, 2],
+      clickPointIndex: 7,
+      expectedNearestPointIndex: 7
+    },
+    {
+      data: [12, 0, null, null, null, null, 0, 2],
+      clickPointIndex: 3,
+      expectedNearestPointIndex: 1
+    },
+    {
+      data: [12, 0, null, null, null, null, 0, 2],
+      clickPointIndex: 4,
+      expectedNearestPointIndex: 6
+    },
+    {
+      data: [12, -1, null, null, null, null, -1, 2],
+      clickPointIndex: 3,
+      expectedNearestPointIndex: 1
+    },
+    {
+      data: [12, -1, null, null, null, null, -1, 2],
+      clickPointIndex: 4,
+      expectedNearestPointIndex: 6
+    },
+    {
+      data: [null, 2],
+      clickPointIndex: 0,
+      expectedNearestPointIndex: 1
+    },
+    {
+      data: [2, null],
+      clickPointIndex: 1,
+      expectedNearestPointIndex: 0
+    },
+    {
+      data: [null, null, 2],
+      clickPointIndex: 0,
+      expectedNearestPointIndex: 2
+    },
+    {
+      data: [2, null, null],
+      clickPointIndex: 2,
+      expectedNearestPointIndex: 0
+    }
+  ];
+  testCases.forEach(({data, clickPointIndex, expectedNearestPointIndex}, i) => {
+    it(`should select nearest non-null element with index ${expectedNearestPointIndex} when clicking on element with index ${clickPointIndex} in test case ${i + 1} if spanGaps=true`, function() {
+      const chart = window.acquireChart({
+        type: 'line',
+        data: {
+          labels: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+          datasets: [{
+            data: data,
+            spanGaps: true,
+          }]
+        }
+      });
+      chart.update();
+      const meta = chart.getDatasetMeta(0);
+      const point = meta.data[clickPointIndex];
+
+      const evt = {
+        type: 'click',
+        chart: chart,
+        native: true, // needed otherwise things its a DOM event
+        x: point.x,
+        y: point.y,
+      };
+
+      const elements = Chart.Interaction.modes.nearest(chart, evt, {axis: 'x', intersect: false}).map(item => item.element);
+      expect(elements).toEqual([meta.data[expectedNearestPointIndex]]);
     });
   });
 });

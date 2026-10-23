@@ -1,10 +1,10 @@
-import registry from './core.registry';
-import {callback as callCallback, isNullOrUndef, valueOrDefault} from '../helpers/helpers.core';
+import registry from './core.registry.js';
+import {callback as callCallback, isNullOrUndef, valueOrDefault} from '../helpers/helpers.core.js';
 
 /**
- * @typedef { import("./core.controller").default } Chart
- * @typedef { import("../platform/platform.base").ChartEvent } ChartEvent
- * @typedef { import("../plugins/plugin.tooltip").default } Tooltip
+ * @typedef { import('./core.controller.js').default } Chart
+ * @typedef { import('../types/index.js').ChartEvent } ChartEvent
+ * @typedef { import('../plugins/plugin.tooltip.js').default } Tooltip
  */
 
 /**
@@ -19,7 +19,7 @@ import {callback as callCallback, isNullOrUndef, valueOrDefault} from '../helper
 
 export default class PluginService {
   constructor() {
-    this._init = [];
+    this._init = undefined;
   }
 
   /**
@@ -33,19 +33,22 @@ export default class PluginService {
 	 * @returns {boolean} false if any of the plugins return false, else returns true.
 	 */
   notify(chart, hook, args, filter) {
-    const me = this;
-
     if (hook === 'beforeInit') {
-      me._init = me._createDescriptors(chart, true);
-      me._notify(me._init, chart, 'install');
+      this._init = this._createDescriptors(chart, true);
+      this._notify(this._init, chart, 'install');
     }
 
-    const descriptors = filter ? me._descriptors(chart).filter(filter) : me._descriptors(chart);
-    const result = me._notify(descriptors, chart, hook, args);
+    if (this._init === undefined) { // Do not trigger events before install
+      return;
+    }
 
-    if (hook === 'destroy') {
-      me._notify(descriptors, chart, 'stop');
-      me._notify(me._init, chart, 'uninstall');
+    const descriptors = filter ? this._descriptors(chart).filter(filter) : this._descriptors(chart);
+    const result = this._notify(descriptors, chart, hook, args);
+
+    if (hook === 'afterDestroy') {
+      this._notify(descriptors, chart, 'stop');
+      this._notify(this._init, chart, 'uninstall');
+      this._init = undefined; // Do not trigger events after uninstall
     }
     return result;
   }
@@ -117,9 +120,10 @@ export default class PluginService {
 }
 
 /**
- * @param {import("./core.config").default} config
+ * @param {import('./core.config.js').default} config
  */
 function allPlugins(config) {
+  const localIds = {};
   const plugins = [];
   const keys = Object.keys(registry.plugins.items);
   for (let i = 0; i < keys.length; i++) {
@@ -132,10 +136,11 @@ function allPlugins(config) {
 
     if (plugins.indexOf(plugin) === -1) {
       plugins.push(plugin);
+      localIds[plugin.id] = true;
     }
   }
 
-  return plugins;
+  return {plugins, localIds};
 }
 
 function getOpts(options, all) {
@@ -148,12 +153,11 @@ function getOpts(options, all) {
   return options;
 }
 
-function createDescriptors(chart, plugins, options, all) {
+function createDescriptors(chart, {plugins, localIds}, options, all) {
   const result = [];
   const context = chart.getContext();
 
-  for (let i = 0; i < plugins.length; i++) {
-    const plugin = plugins[i];
+  for (const plugin of plugins) {
     const id = plugin.id;
     const opts = getOpts(options[id], all);
     if (opts === null) {
@@ -161,21 +165,24 @@ function createDescriptors(chart, plugins, options, all) {
     }
     result.push({
       plugin,
-      options: pluginOpts(chart.config, plugin, opts, context)
+      options: pluginOpts(chart.config, {plugin, local: localIds[id]}, opts, context)
     });
   }
 
   return result;
 }
 
-/**
- * @param {import("./core.config").default} config
- * @param {*} plugin
- * @param {*} opts
- * @param {*} context
- */
-function pluginOpts(config, plugin, opts, context) {
+function pluginOpts(config, {plugin, local}, opts, context) {
   const keys = config.pluginScopeKeys(plugin);
   const scopes = config.getOptionScopes(opts, keys);
-  return config.createResolver(scopes, context, [''], {scriptable: false, indexable: false, allKeys: true});
+  if (local && plugin.defaults) {
+    // make sure plugin defaults are in scopes for local (not registered) plugins
+    scopes.push(plugin.defaults);
+  }
+  return config.createResolver(scopes, context, [''], {
+    // These are just defaults that plugins can override
+    scriptable: false,
+    indexable: false,
+    allKeys: true
+  });
 }

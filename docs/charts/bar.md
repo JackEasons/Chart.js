@@ -74,11 +74,11 @@ Only the `data` option needs to be specified in the dataset namespace.
 | [`barPercentage`](#barpercentage) | `number` | - | - | `0.9` |
 | [`barThickness`](#barthickness) | `number`\|`string` | - | - | |
 | [`borderColor`](#styling) | [`Color`](../general/colors.md) | Yes | Yes | `'rgba(0, 0, 0, 0.1)'`
-| [`borderSkipped`](#borderskipped) | `string` | Yes | Yes | `'start'`
+| [`borderSkipped`](#borderskipped) | `string`\|`boolean` | Yes | Yes | `'start'`
 | [`borderWidth`](#borderwidth) | `number`\|`object` | Yes | Yes | `0`
 | [`borderRadius`](#borderradius) | `number`\|`object` | Yes | Yes | `0`
 | [`categoryPercentage`](#categorypercentage) | `number` | - | - | `0.8` |
-| [`clip`](#general) | `number`\|`object` | - | - |
+| [`clip`](#general) | `number`\|`object`\|`false` | - | - |
 | [`data`](#data-structure) | `object`\|`object[]`\| `number[]`\|`string[]` | - | - | **required**
 | [`grouped`](#general) | `boolean` | - | - | `true` |
 | [`hoverBackgroundColor`](#interactions) | [`Color`](../general/colors.md) | Yes | Yes |
@@ -86,11 +86,12 @@ Only the `data` option needs to be specified in the dataset namespace.
 | [`hoverBorderWidth`](#interactions) | `number` | Yes | Yes | `1`
 | [`hoverBorderRadius`](#interactions) | `number` | Yes | Yes | `0`
 | [`indexAxis`](#general) | `string` | - | - | `'x'`
+| [`inflateAmount`](#inflateamount) | `number`\|`'auto'` | Yes | Yes | `'auto'`
 | [`maxBarThickness`](#maxbarthickness) | `number` | - | - | |
 | [`minBarLength`](#styling) | `number` | - | - | |
 | [`label`](#general) | `string` | - | - | `''`
 | [`order`](#general) | `number` | - | - | `0`
-| [`pointStyle`](../configuration/elements.md#point-styles) | `string`\|`Image` | Yes | - | `'circle'`
+| [`pointStyle`](../configuration/elements.md#point-styles) | [`pointStyle`](../configuration/elements.md#types) | Yes | - | `'circle'`
 | [`skipNull`](#general) | `boolean` | - | - | |
 | [`stack`](#general) | `string` | - | - | `'bar'` |
 | [`xAxisID`](#general) | `string` | - | - | first x axis
@@ -121,9 +122,9 @@ data: {
 | `grouped` | Should the bars be grouped on index axis. When `true`, all the datasets at same index value will be placed next to each other centering on that index value. When `false`, each bar is placed on its actual index-axis value.
 | `indexAxis` | The base axis of the dataset. `'x'` for vertical bars and `'y'` for horizontal bars.
 | `label` | The label for the dataset which appears in the legend and tooltips.
-| `order` | The drawing order of dataset. Also affects order for stacking, tooltip, and legend.
+| `order` | The drawing order of dataset. Also affects order for stacking, tooltip and legend. [more](mixed.md#drawing-order)
 | `skipNull` | If `true`, null or undefined values will not be used for spacing calculations when determining bar size.
-| `stack` | The ID of the group to which this dataset belongs to (when stacked, each group will be a separate stack). [more](#stacked-bar-charts)
+| `stack` | The ID of the group to which this dataset belongs to (when stacked, each group will be a separate stack). [more](#stacked-bar-chart)
 | `xAxisID` | The ID of the x-axis to plot this dataset on.
 | `yAxisID` | The ID of the y-axis to plot this dataset on.
 
@@ -157,11 +158,13 @@ Options are:
 
 * `'start'`
 * `'end'`
+* `'middle'` (only valid on stacked bars: the borders between bars are skipped)
 * `'bottom'`
 * `'left'`
 * `'top'`
 * `'right'`
-* `false`
+* `false` (don't skip any borders)
+* `true` (skip all borders)
 
 #### borderWidth
 
@@ -174,6 +177,10 @@ If this value is a number, it is applied to all corners of the rectangle (topLef
 :::tip Stacked Charts
 When the border radius is supplied as a number and the chart is stacked, the radius will only be applied to the bars that are at the edges of the stack or where the bar is floating. The object syntax can be used to override this behavior.
 :::
+
+#### inflateAmount
+
+This option can be used to inflate the rects that are used to draw the bars. This can be used to hide artifacts between bars when [`barPercentage`](#barpercentage) * [`categoryPercentage`](#categorypercentage) is 1. The default value `'auto'` should work in most cases.
 
 ### Interactions
 
@@ -265,14 +272,14 @@ Sample:     |==================|
 
 ## Data Structure
 
-All of the supported [data structures](../general/data-structures.md) can be used with bar charts.
+All the supported [data structures](../general/data-structures.md) can be used with bar charts.
 
 ## Stacked Bar Chart
 
 Bar charts can be configured into stacked bar charts by changing the settings on the X and Y axes to enable stacking. Stacked bar charts can be used to show how one data series is made up of a number of smaller pieces.
 
 ```javascript
-var stackedBar = new Chart(ctx, {
+const stackedBar = new Chart(ctx, {
     type: 'bar',
     data: data,
     options: {
@@ -291,7 +298,7 @@ var stackedBar = new Chart(ctx, {
 ## Horizontal Bar Chart
 
 A horizontal bar chart is a variation on a vertical bar chart. It is sometimes used to show trend data, and the comparison of multiple data sets side by side.
-To achieve this you will have to set the `indexAxis` property in the options object to `'y'`.
+To achieve this, you will have to set the `indexAxis` property in the options object to `'y'`.
 The default for this property is `'x'` and thus will show vertical bars.
 
 ```js chart-editor
